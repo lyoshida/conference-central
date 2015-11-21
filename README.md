@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 App Engine application for the Udacity training course.
 
 ## Products
@@ -30,3 +31,6 @@ App Engine application for the Udacity training course.
 [4]: https://console.developers.google.com/
 [5]: https://localhost:8080/
 [6]: https://developers.google.com/appengine/docs/python/endpoints/endpoints_tool
+=======
+# conference-central
+>>>>>>> c9695f6e1fc81a88a0f7fbaf54bc14d1c85bfaca

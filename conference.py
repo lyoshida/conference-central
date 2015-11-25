@@ -36,6 +36,8 @@ from models import ConferenceForms
 from models import ConferenceQueryForm
 from models import ConferenceQueryForms
 from models import TeeShirtSize
+from models import Session
+from models import SessionForm
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
@@ -550,5 +552,44 @@ class ConferenceApi(remote.Service):
             items=[self._copyConferenceToForm(conf, "") for conf in q]
         )
 
+# - - - Session - - - - - - - - - - - - - - - - - - - -
+
+    def _getSessions(self,):
+        """Returns a list of session for a given conference"""
+        # make sure user is authed
+        # user = endpoints.get_current_user()
+        # if not user:
+        #     raise endpoints.UnauthorizedException('Authorization required')
+        #
+        # # get Profile from datastore
+        # user_id = getUserId(user)
+        # p_key = ndb.Key(Profile, user_id)
+        # profile = p_key.get()
+        # # create new Profile if not there
+        # if not profile:
+        #     profile = Profile(
+        #         key = p_key,
+        #         displayName = user.nickname(),
+        #         mainEmail= user.email(),
+        #         teeShirtSize = str(TeeShirtSize.NOT_SPECIFIED),
+        #     )
+        #     profile.put()
+        #
+        # return profile      # return Profile
+
+
+    def getConferenceSessions(self, request):
+        sessions = Session.query(ancestor=ndb.Key(Conference, id))
+
+        return sessions
+
+    def getConferenceSessionsByType(self, request):
+        pass
+
+    def getSessionsBySpeaker(self, request):
+        pass
+
+    def createSession(self, request):
+        pass
 
 api = endpoints.api_server([ConferenceApi]) # register API

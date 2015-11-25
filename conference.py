@@ -38,6 +38,7 @@ from models import ConferenceQueryForms
 from models import TeeShirtSize
 from models import Session
 from models import SessionForm
+from models import SessionForms
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
@@ -581,7 +582,7 @@ class ConferenceApi(remote.Service):
         sf.check_initialized()
         return sf
 
-    @endpoints.method(SESSION_GET_REQUEST, SessionForm,
+    @endpoints.method(SESSION_GET_REQUEST, SessionForms,
                       path='conference/{websafeConferenceKey}/sessions',
                       http_method='GET', name='getConfereceSessions')
     def getConferenceSessions(self, request):
@@ -590,9 +591,11 @@ class ConferenceApi(remote.Service):
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
 
-        sessions = Session.query(ancestor=ndb.Key(Conference, id))
+        sessions = Session.query(ancestor=ndb.Key(Conference, request.websafeConferenceKey))
 
-        return sessions
+        return SessionForms(
+            sessions=[self._copySessionToForm(session) for session in sessions]
+        )
 
     def getConferenceSessionsByType(self, request):
         pass

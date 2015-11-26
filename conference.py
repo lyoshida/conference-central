@@ -92,6 +92,17 @@ SESSION_GET_REQUEST = endpoints.ResourceContainer(
     websafeConferenceKey=messages.StringField(1)
 )
 
+SESSIONS_BY_TYPE_GET_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+    websafeConferenceKey=messages.StringField(1),
+    sessionType=messages.StringField(2)
+)
+
+SESSIONS_BY_SPEAKER_GET_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+    speaker=messages.StringField(1)
+)
+
 SESSION_POST_REQUEST = endpoints.ResourceContainer(
     SessionForm,
     websafeConferenceKey=messages.StringField(1)
@@ -597,11 +608,39 @@ class ConferenceApi(remote.Service):
             sessions=[self._copySessionToForm(session) for session in sessions]
         )
 
+    @endpoints.method(SESSIONS_BY_TYPE_GET_REQUEST, SessionForms,
+                      path='conference/{websafeConferenceKey}/sessions/type/{sessionType}',
+                      http_method='GET', name='getConferenceSessionsByType')
     def getConferenceSessionsByType(self, request):
-        pass
+        """Returns a list of sessions in a conference, filtered by type"""
 
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+
+        sessions = Session.query(ancestor=ndb.Key(Conference, request.websafeConferenceKey))
+        sessions = sessions.filter(Session.typeOfSession == request.sessionType)
+
+        return SessionForms(
+            sessions=[self._copySessionToForm(session) for session in sessions]
+        )
+
+    @endpoints.method(SESSIONS_BY_SPEAKER_GET_REQUEST, SessionForms,
+                      path='sessions/speaker/{speaker}',
+                      http_method='GET', name='getSessionsBySpeaker')
     def getSessionsBySpeaker(self, request):
-        pass
+        """Returns a list of sessions of a particular speaker"""
+
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+
+        sessions = Session.query()
+        sessions = sessions.filter(Session.speaker == request.speaker)
+
+        return SessionForms(
+            sessions=[self._copySessionToForm(session) for session in sessions]
+        )
 
     @endpoints.method(SESSION_POST_REQUEST, SessionForm,
                       path='conference/{websafeConferenceKey}/session',

@@ -39,6 +39,9 @@ from models import TeeShirtSize
 from models import Session
 from models import SessionForm
 from models import SessionForms
+from models import UserWishList
+from models import UserWishListForm
+from models import UserWishListSessionForms
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
@@ -106,6 +109,17 @@ SESSIONS_BY_SPEAKER_GET_REQUEST = endpoints.ResourceContainer(
 SESSION_POST_REQUEST = endpoints.ResourceContainer(
     SessionForm,
     websafeConferenceKey=messages.StringField(1)
+)
+
+WISHLIST_GET_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+    websafeConferenceKey=messages.StringField(1)
+)
+
+WISHLIST_POST_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+    websafeConferenceKey=messages.StringField(1),
+    sessionId=messages.StringField(2)
 )
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -586,7 +600,7 @@ class ConferenceApi(remote.Service):
                     setattr(sf, field.name, str(getattr(session, field.name)))
                 else:
                     setattr(sf, field.name, getattr(session, field.name))
-            elif field.name == "websafeKey":
+            elif field.name == "sessionId":
                 setattr(sf, field.name, session.key.urlsafe())
         # if displayName:
         #     setattr(sf, 'organizerDisplayName', displayName)
@@ -668,10 +682,92 @@ class ConferenceApi(remote.Service):
         session_id = Session.allocate_ids(size=1, parent=p_key)[0]
         session_key = ndb.Key(Session, session_id, parent=p_key)
         data['key'] = session_key
+        data['sessionId'] = session_key.urlsafe()
 
         new_session = Session(**data)
         new_session.put()
 
         return self._copySessionToForm(new_session)
 
+    @endpoints.method(WISHLIST_POST_REQUEST, UserWishListForm,
+                      path='conference/{websafeConferenceKey}/session/{sessionId}/wishlist',
+                      http_method='POST', name='addWishList')
+    def addWishList(self, request):
+        """Adds a session to a user wishlist"""
+        user = endpoints.get_current_user()
+
+        # User is logged in
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+
+        # Check if parameters were provided
+        if not request.websafeConferenceKey or not request.sessionId:
+            raise endpoints.BadRequestException('websafeConferenceKey and sessionId are required')
+
+        # check that conference exists
+        conf_key = ndb.Key(urlsafe=request.websafeConferenceKey)
+        conf = conf_key.get()
+        if not conf:
+            raise endpoints.NotFoundException('No conference found with key: %s' % request.websafeConferenceKey)
+
+        # check that session exists
+        session_key = ndb.Key(urlsafe=request.sessionId)
+        session = session_key.get()
+        if not session:
+            raise endpoints.NotFoundException('No session found with key: %s' % request.sessionId)
+
+        new_wishlist_session = UserWishList(
+            userId=getUserId(user),
+            conferenceId=conf_key.urlsafe(),
+            sessionId=session_key.urlsafe()
+        )
+        new_wishlist_session.put()
+
+        return UserWishListForm(
+            userId=getUserId(user),
+            conferenceId=conf_key.urlsafe(),
+            sessionId=session_key.urlsafe()
+        )
+
+    @endpoints.method(WISHLIST_GET_REQUEST, UserWishListSessionForms,
+                      path='conference/{websafeConferenceKey}/wishlist',
+                      http_method='GET', name='getWishList')
+    def getWishList(self, request):
+        """Retrieves a list of wishlisted sessions for the current user"""
+        user = endpoints.get_current_user()
+
+        # User is logged in
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+
+        # Check if parameters were provided
+        if not request.websafeConferenceKey:
+            raise endpoints.BadRequestException('websafeConferenceKey is required')
+
+        # check that conference exists
+        conf = ndb.Key(urlsafe=request.websafeConferenceKey)
+        if not conf:
+            raise endpoints.NotFoundException('No conference found with key: %s' % conf)
+
+        sessions_in_wishlist = UserWishList.query().filter(UserWishList.userId == getUserId(user),
+                                                           UserWishList.conferenceId == request.websafeConferenceKey)
+
+        session_keys = [ndb.Key(urlsafe=wishlist.sessionId)
+                        for wishlist in sessions_in_wishlist]
+        print(session_keys)
+
+        sessions = ndb.get_multi(session_keys)
+        for session in sessions:
+            print(session)
+
+        return UserWishListSessionForms(sessions=[self._copySessionToForm(session) for session in sessions])
+
+
+
 api = endpoints.api_server([ConferenceApi]) # register API
+
+#Conf
+#agpzfmNvbmZvcmcxcjMLEgdQcm9maWxlIhZsdWlzLnlvc2hpZGFAZ21haWwuY29tDAsSCkNvbmZlcmVuY2UYAQw
+
+# Session
+#agpzfmNvbmZvcmcxcnYLEgpDb25mZXJlbmNlIldhZ3B6Zm1OdmJtWnZjbWN4Y2pNTEVnZFFjbTltYVd4bEloWnNkV2x6TG5sdmMyaHBaR0ZBWjIxaGFXd3VZMjl0REFzU0NrTnZibVpsY21WdVkyVVlBUXcMCxIHU2Vzc2lvbhjh1AMM

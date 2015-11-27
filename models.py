@@ -117,7 +117,7 @@ class Session(ndb.Model):
     typeOfSession = ndb.StringProperty()
     date = ndb.DateProperty()
     startTime = ndb.TimeProperty()
-
+    sessionId = ndb.StringProperty()
 
 class SessionForm(messages.Message):
     name = messages.StringField(1, required=True)
@@ -127,7 +127,23 @@ class SessionForm(messages.Message):
     typeOfSession = messages.StringField(5)
     date = messages.StringField(6)
     startTime = messages.StringField(7)
-
+    sessionId = messages.StringField(8)
 
 class SessionForms(messages.Message):
+    sessions = messages.MessageField(SessionForm, 1, repeated=True)
+
+
+class UserWishList(ndb.Model):
+    userId = ndb.StringProperty(required=True)
+    conferenceId = ndb.StringProperty(required=True)
+    sessionId = ndb.StringProperty(required=True)
+
+
+class UserWishListForm(messages.Message):
+    userId = messages.StringField(1)
+    conferenceId = messages.StringField(2)
+    sessionId = messages.StringField(3)
+
+
+class UserWishListSessionForms(messages.Message):
     sessions = messages.MessageField(SessionForm, 1, repeated=True)

@@ -122,6 +122,11 @@ WISHLIST_POST_REQUEST = endpoints.ResourceContainer(
     sessionId=messages.StringField(2)
 )
 
+CONF_BY_CITY_GET_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+    city=messages.StringField(1)
+)
+
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 
@@ -754,13 +759,33 @@ class ConferenceApi(remote.Service):
 
         session_keys = [ndb.Key(urlsafe=wishlist.sessionId)
                         for wishlist in sessions_in_wishlist]
-        print(session_keys)
 
         sessions = ndb.get_multi(session_keys)
-        for session in sessions:
-            print(session)
 
         return UserWishListSessionForms(sessions=[self._copySessionToForm(session) for session in sessions])
+
+
+    @endpoints.method(CONF_BY_CITY_GET_REQUEST, ConferenceForm,
+                      path='conferences/city/{city}',
+                      http_method='GET', name='getConferencesByCity')
+    def getConferencesByCity(self, request):
+        """Retrieves a list of conference in a specific city """
+        user = endpoints.get_current_user()
+
+        # User is logged in
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required.')
+
+        # Check city
+        if not request.city:
+            raise endpoints.BadRequestException('A city is required.')
+
+        confs = Conference.query().filter(Conference.city == request.city)
+
+        return ConferenceForms(
+            [self._copyConferenceToForm(conf) for conf in confs]
+        )
+
 
 
 

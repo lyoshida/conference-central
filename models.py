@@ -119,6 +119,7 @@ class Session(ndb.Model):
     startTime = ndb.TimeProperty()
     sessionId = ndb.StringProperty()
 
+
 class SessionForm(messages.Message):
     name = messages.StringField(1, required=True)
     highlights = messages.StringField(2)
@@ -128,6 +129,7 @@ class SessionForm(messages.Message):
     date = messages.StringField(6)
     startTime = messages.StringField(7)
     sessionId = messages.StringField(8)
+
 
 class SessionForms(messages.Message):
     sessions = messages.MessageField(SessionForm, 1, repeated=True)

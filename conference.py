@@ -122,6 +122,11 @@ WISHLIST_POST_REQUEST = endpoints.ResourceContainer(
     sessionId=messages.StringField(2)
 )
 
+WISHLIST_DELETE_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+    sessionId=messages.StringField(1)
+)
+
 CONF_BY_CITY_GET_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
     city=messages.StringField(1)
@@ -769,9 +774,29 @@ class ConferenceApi(remote.Service):
 
         return UserWishListSessionForms(sessions=[self._copySessionToForm(session) for session in sessions])
 
-    def deleteWishList(self,request):
-        pass
-        # TODO: implement
+    @endpoints.method(WISHLIST_DELETE_REQUEST, BooleanMessage,
+                      path='session/{sessionId}',
+                      http_method='DELETE', name='deleteWishList')
+    def deleteWishList(self, request):
+        user = endpoints.get_current_user()
+
+        # User is logged in
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+
+        session_key = ndb.Key(urlsafe=request.sessionId)
+        session = session_key.get()
+
+        if not session:
+            raise endpoints.NotFoundException('Session not found')
+
+        if user.email != session.key:
+            raise endpoints.UnauthorizedException('User is not authorized.')
+
+        session_key.delete()
+
+        return BooleanMessage(data=True)
+
 
     # Aditional Queries ------------------------------------------------------------------------------------------------
     @endpoints.method(CONF_BY_CITY_GET_REQUEST, ConferenceForm,

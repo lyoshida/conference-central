@@ -127,6 +127,10 @@ CONF_BY_CITY_GET_REQUEST = endpoints.ResourceContainer(
     city=messages.StringField(1)
 )
 
+CONF_SEATS_AVAILABLE_GET_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+)
+
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 
@@ -694,6 +698,7 @@ class ConferenceApi(remote.Service):
 
         return self._copySessionToForm(new_session)
 
+    # Wishlist --------------------------------------------------------------------------------------------------------
     @endpoints.method(WISHLIST_POST_REQUEST, UserWishListForm,
                       path='conference/{websafeConferenceKey}/session/{sessionId}/wishlist',
                       http_method='POST', name='addWishList')
@@ -764,7 +769,11 @@ class ConferenceApi(remote.Service):
 
         return UserWishListSessionForms(sessions=[self._copySessionToForm(session) for session in sessions])
 
+    def deleteWishList(self,request):
+        pass
+        # TODO: implement
 
+    # Aditional Queries ------------------------------------------------------------------------------------------------
     @endpoints.method(CONF_BY_CITY_GET_REQUEST, ConferenceForm,
                       path='conferences/city/{city}',
                       http_method='GET', name='getConferencesByCity')
@@ -786,7 +795,23 @@ class ConferenceApi(remote.Service):
             [self._copyConferenceToForm(conf) for conf in confs]
         )
 
+    @endpoints.method(CONF_SEATS_AVAILABLE_GET_REQUEST, ConferenceForm,
+                      path='conferences/available',
+                      http_method='GET', name='getConferencesAvailable')
+    def getConferencesAvailable(self, request):
+        """Retrieves conferences that still have seats"""
 
+        user = endpoints.get_current_user()
+
+        # User is logged in
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required.')
+
+        confs = Conference.query().filter(Conference.seatsAvailable > 0)
+
+        return ConferenceForms(
+            [self._copyConferenceToForm(conf) for conf in confs]
+        )
 
 
 api = endpoints.api_server([ConferenceApi]) # register API

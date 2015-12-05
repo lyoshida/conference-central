@@ -42,6 +42,7 @@ from models import SessionForms
 from models import UserWishList
 from models import UserWishListForm
 from models import UserWishListSessionForms
+from models import FeaturedSpeakerForm
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
@@ -55,6 +56,9 @@ API_EXPLORER_CLIENT_ID = endpoints.API_EXPLORER_CLIENT_ID
 MEMCACHE_ANNOUNCEMENTS_KEY = "RECENT_ANNOUNCEMENTS"
 ANNOUNCEMENT_TPL = ('Last chance to attend! The following conferences '
                     'are nearly sold out: %s')
+MEMCACHE_SPEAKER_KEY = 'SPEAKER'
+SPEAKER_TPL = 'More sessions from %s: %s.'
+
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 DEFAULTS = {
@@ -129,6 +133,16 @@ CONF_BY_CITY_GET_REQUEST = endpoints.ResourceContainer(
 
 CONF_SEATS_AVAILABLE_GET_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
+)
+
+FEAT_SPEAKER_POST_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+    speaker=messages.StringField(1),
+    websafeConferenceKey=messages.StringField(2)
+)
+
+FEAT_SPEAKER_GET_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage
 )
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -696,6 +710,11 @@ class ConferenceApi(remote.Service):
         new_session = Session(**data)
         new_session.put()
 
+        taskqueue.add(params={'speaker': getattr(request, 'speaker'),
+                              'websafeConferenceKey': request.websafeConferenceKey},
+                      url='/setFeaturedSpeaker')
+
+
         return self._copySessionToForm(new_session)
 
     # Wishlist --------------------------------------------------------------------------------------------------------
@@ -813,6 +832,55 @@ class ConferenceApi(remote.Service):
             [self._copyConferenceToForm(conf) for conf in confs]
         )
 
+    # Featured speaker -------------------------------------------------------------------------------------------------
+
+    @endpoints.method(FEAT_SPEAKER_POST_REQUEST, BooleanMessage,
+                      path='conference/{websafeConferenceKey}/speaker/{speaker}',
+                      http_method='POST', name='setFeaturedSpeaker')
+    def setFeaturedSpeaker(self, request):
+        """Sets the featured speaker in memcache"""
+        # Retrieves a list of sessions from the same speaker at this conference
+
+        user = endpoints.get_current_user()
+
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required.')
+
+        if not getattr(request, 'speaker') or not request.websafeConferenceKey:
+            raise endpoints.BadRequestException('No parameters.')
+
+        p_key = ndb.Key(Conference, request.websafeConferenceKey)
+
+        sessions_by_speaker = Session.query(ancestor=p_key)\
+                                     .filter(Session.speaker == getattr(request, 'speaker'))
+
+        if sessions_by_speaker.count() > 0:
+            sessions_str = ''
+            for session in sessions_by_speaker:
+                sessions_str += session.name + ','
+
+            sessions_str = sessions_str[:-1]
+
+            speaker_memcache_message = SPEAKER_TPL % (getattr(request, 'speaker'), sessions_str)
+
+            memcache.set(MEMCACHE_SPEAKER_KEY, speaker_memcache_message)
+
+        return BooleanMessage(data=True)
+
+    @endpoints.method(FEAT_SPEAKER_GET_REQUEST, FeaturedSpeakerForm,
+                      path='getFeaturedSpeaker',
+                      http_method='GET', name='getFeaturedSpeaker')
+    def getFeaturedSpeaker(self, request):
+        """Returns the featured speaker message"""
+        message = memcache.get(MEMCACHE_SPEAKER_KEY)
+
+        featuredSpeakerForm = FeaturedSpeakerForm()
+        if message:
+            setattr(featuredSpeakerForm, 'message', message)
+        else:
+            setattr(featuredSpeakerForm, 'message', '')
+
+        return featuredSpeakerForm
 
 api = endpoints.api_server([ConferenceApi]) # register API
 

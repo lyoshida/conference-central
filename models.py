@@ -149,3 +149,7 @@ class UserWishListForm(messages.Message):
 
 class UserWishListSessionForms(messages.Message):
     sessions = messages.MessageField(SessionForm, 1, repeated=True)
+
+
+class FeaturedSpeakerForm(messages.Message):
+    message = messages.StringField(1)

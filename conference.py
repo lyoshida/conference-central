@@ -881,9 +881,3 @@ class ConferenceApi(remote.Service):
         return featuredSpeakerForm
 
 api = endpoints.api_server([ConferenceApi]) # register API
-
-#Conf
-#agpzfmNvbmZvcmcxcjMLEgdQcm9maWxlIhZsdWlzLnlvc2hpZGFAZ21haWwuY29tDAsSCkNvbmZlcmVuY2UYAQw
-
-# Session
-#agpzfmNvbmZvcmcxcnYLEgpDb25mZXJlbmNlIldhZ3B6Zm1OdmJtWnZjbWN4Y2pNTEVnZFFjbTltYVd4bEloWnNkV2x6TG5sdmMyaHBaR0ZBWjIxaGFXd3VZMjl0REFzU0NrTnZibVpsY21WdVkyVVlBUXcMCxIHU2Vzc2lvbhjh1AMM

@@ -142,8 +142,8 @@ CONF_SEATS_AVAILABLE_GET_REQUEST = endpoints.ResourceContainer(
 
 FEAT_SPEAKER_POST_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
-    speaker=messages.StringField(1),
-    websafeConferenceKey=messages.StringField(2)
+    websafeConferenceKey=messages.StringField(1),
+    speaker=messages.StringField(2)
 )
 
 FEAT_SPEAKER_GET_REQUEST = endpoints.ResourceContainer(
@@ -717,7 +717,7 @@ class ConferenceApi(remote.Service):
 
         taskqueue.add(params={'speaker': getattr(request, 'speaker'),
                               'websafeConferenceKey': request.websafeConferenceKey},
-                      url='/setFeaturedSpeaker')
+                      url='/tasks/setFeaturedSpeaker')
 
 
         return self._copySessionToForm(new_session)
@@ -797,6 +797,7 @@ class ConferenceApi(remote.Service):
                       path='session/{sessionId}',
                       http_method='DELETE', name='deleteWishList')
     def deleteWishList(self, request):
+        """Deletes a UserWishList object"""
         user = endpoints.get_current_user()
 
         # User is logged in
@@ -809,16 +810,18 @@ class ConferenceApi(remote.Service):
         if not session:
             raise endpoints.NotFoundException('Session not found')
 
-        if user.email != session.key:
-            raise endpoints.UnauthorizedException('User is not authorized.')
+        wishlist_entity = UserWishList.query().filter(UserWishList.userId == getUserId(user),
+                                                      UserWishList.sessionId == request.sessionId).fetch()
 
-        session_key.delete()
+        for wish in wishlist_entity:
+
+            wish.key.delete()
 
         return BooleanMessage(data=True)
 
 
     # Aditional Queries ------------------------------------------------------------------------------------------------
-    @endpoints.method(CONF_BY_CITY_GET_REQUEST, ConferenceForm,
+    @endpoints.method(CONF_BY_CITY_GET_REQUEST, ConferenceForms,
                       path='conferences/city/{city}',
                       http_method='GET', name='getConferencesByCity')
     def getConferencesByCity(self, request):
@@ -835,11 +838,13 @@ class ConferenceApi(remote.Service):
 
         confs = Conference.query().filter(Conference.city == request.city)
 
+        user_key = ndb.Key(Profile, getUserId(user)).get()
+
         return ConferenceForms(
-            [self._copyConferenceToForm(conf) for conf in confs]
+            items=[self._copyConferenceToForm(conf, getattr(user_key, 'displayName')) for conf in confs]
         )
 
-    @endpoints.method(CONF_SEATS_AVAILABLE_GET_REQUEST, ConferenceForm,
+    @endpoints.method(CONF_SEATS_AVAILABLE_GET_REQUEST, ConferenceForms,
                       path='conferences/available',
                       http_method='GET', name='getConferencesAvailable')
     def getConferencesAvailable(self, request):
@@ -852,45 +857,13 @@ class ConferenceApi(remote.Service):
             raise endpoints.UnauthorizedException('Authorization required.')
 
         confs = Conference.query().filter(Conference.seatsAvailable > 0)
+        user_key = ndb.Key(Profile, getUserId(user)).get()
 
         return ConferenceForms(
-            [self._copyConferenceToForm(conf) for conf in confs]
+            items=[self._copyConferenceToForm(conf, getattr(user_key, 'displayName')) for conf in confs]
         )
 
     # Featured speaker -------------------------------------------------------------------------------------------------
-
-    @endpoints.method(FEAT_SPEAKER_POST_REQUEST, BooleanMessage,
-                      path='conference/{websafeConferenceKey}/speaker/{speaker}',
-                      http_method='POST', name='setFeaturedSpeaker')
-    def setFeaturedSpeaker(self, request):
-        """Sets the featured speaker in memcache"""
-        # Retrieves a list of sessions from the same speaker at this conference
-
-        user = endpoints.get_current_user()
-
-        if not user:
-            raise endpoints.UnauthorizedException('Authorization required.')
-
-        if not getattr(request, 'speaker') or not request.websafeConferenceKey:
-            raise endpoints.BadRequestException('No parameters.')
-
-        p_key = ndb.Key(Conference, request.websafeConferenceKey)
-
-        sessions_by_speaker = Session.query(ancestor=p_key)\
-                                     .filter(Session.speaker == getattr(request, 'speaker'))
-
-        if sessions_by_speaker.count() > 0:
-            sessions_str = ''
-            for session in sessions_by_speaker:
-                sessions_str += session.name + ','
-
-            sessions_str = sessions_str[:-1]
-
-            speaker_memcache_message = SPEAKER_TPL % (getattr(request, 'speaker'), sessions_str)
-
-            memcache.set(MEMCACHE_SPEAKER_KEY, speaker_memcache_message)
-
-        return BooleanMessage(data=True)
 
     @endpoints.method(FEAT_SPEAKER_GET_REQUEST, FeaturedSpeakerForm,
                       path='getFeaturedSpeaker',

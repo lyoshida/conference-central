@@ -698,13 +698,8 @@ class ConferenceApi(remote.Service):
         if not request.name:
             raise endpoints.BadRequestException('Session name is required.')
 
-        # Checks whether the user is the owner of the conference object
-        # TODO: user is the owner of the conference object
-
         data = {field.name: getattr(request, field.name) for field in request.all_fields()}
         del data['websafeConferenceKey']
-        # TODO: Delete unused values in request
-        # TODO: Add default values to fields
 
         p_key = ndb.Key(Conference, request.websafeConferenceKey)
         session_id = Session.allocate_ids(size=1, parent=p_key)[0]

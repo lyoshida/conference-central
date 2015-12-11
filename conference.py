@@ -116,19 +116,17 @@ SESSION_POST_REQUEST = endpoints.ResourceContainer(
 )
 
 WISHLIST_GET_REQUEST = endpoints.ResourceContainer(
-    message_types.VoidMessage,
-    websafeConferenceKey=messages.StringField(1)
+    message_types.VoidMessage
 )
 
 WISHLIST_POST_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
-    websafeConferenceKey=messages.StringField(1),
-    sessionId=messages.StringField(2)
+    websafeSessionKey=messages.StringField(1)
 )
 
 WISHLIST_DELETE_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
-    sessionId=messages.StringField(1)
+    websafeSessionKey=messages.StringField(1)
 )
 
 CONF_BY_CITY_GET_REQUEST = endpoints.ResourceContainer(
@@ -161,7 +159,7 @@ class ConferenceApi(remote.Service):
 
 # - - - Conference objects - - - - - - - - - - - - - - - - -
 
-    def _copyConferenceToForm(self, conf, displayName):
+    def _copyConferenceToForm(self, conf, displayName=None):
         """Copy relevant fields from Conference to ConferenceForm."""
         cf = ConferenceForm()
         for field in cf.all_fields():
@@ -624,14 +622,14 @@ class ConferenceApi(remote.Service):
         for field in sf.all_fields():
             if hasattr(session, field.name):
                 # convert Date to date string; just copy others
-                if field.name.endswith('Date'):
+                if field.name.endswith('date'):
+                    setattr(sf, field.name, str(getattr(session, field.name)))
+                elif field.name == 'startTime':
                     setattr(sf, field.name, str(getattr(session, field.name)))
                 else:
                     setattr(sf, field.name, getattr(session, field.name))
-            elif field.name == "sessionId":
+            elif field.name == "websafeKey":
                 setattr(sf, field.name, session.key.urlsafe())
-        # if displayName:
-        #     setattr(sf, 'organizerDisplayName', displayName)
         sf.check_initialized()
         return sf
 
@@ -699,13 +697,25 @@ class ConferenceApi(remote.Service):
             raise endpoints.BadRequestException('Session name is required.')
 
         data = {field.name: getattr(request, field.name) for field in request.all_fields()}
-        del data['websafeConferenceKey']
 
-        p_key = ndb.Key(Conference, request.websafeConferenceKey)
-        session_id = Session.allocate_ids(size=1, parent=p_key)[0]
-        session_key = ndb.Key(Session, session_id, parent=p_key)
+        if data['date']:
+            data['date'] = datetime.strptime(data['date'][:10], "%Y-%m-%d").date()
+
+        if data['startTime']:
+            data['startTime'] = datetime.strptime(data['startTime'][:5], "%H-%M").time()
+
+        del data['websafeConferenceKey']
+        del data['websafeKey']
+
+        conf_key = ndb.Key(urlsafe=request.websafeConferenceKey)
+        session_id = Session.allocate_ids(size=1, parent=conf_key)[0]
+        session_key = ndb.Key(Session, session_id, parent=conf_key)
         data['key'] = session_key
-        data['sessionId'] = session_key.urlsafe()
+
+        # Checks if the user making the request is the owner of the conference
+        conference = conf_key.get()
+        if getUserId(user) != conference.organizerUserId:
+            raise endpoints.UnauthorizedException('You must be the conference owner to add sessions.')
 
         new_session = Session(**data)
         new_session.put()
@@ -714,12 +724,11 @@ class ConferenceApi(remote.Service):
                               'websafeConferenceKey': request.websafeConferenceKey},
                       url='/tasks/setFeaturedSpeaker')
 
-
         return self._copySessionToForm(new_session)
 
     # Wishlist --------------------------------------------------------------------------------------------------------
     @endpoints.method(WISHLIST_POST_REQUEST, UserWishListForm,
-                      path='conference/{websafeConferenceKey}/session/{sessionId}/wishlist',
+                      path='session/{websafeSessionKey}/wishlist',
                       http_method='POST', name='addWishList')
     def addWishList(self, request):
         """Adds a session to a user wishlist"""
@@ -730,36 +739,28 @@ class ConferenceApi(remote.Service):
             raise endpoints.UnauthorizedException('Authorization required')
 
         # Check if parameters were provided
-        if not request.websafeConferenceKey or not request.sessionId:
-            raise endpoints.BadRequestException('websafeConferenceKey and sessionId are required')
-
-        # check that conference exists
-        conf_key = ndb.Key(urlsafe=request.websafeConferenceKey)
-        conf = conf_key.get()
-        if not conf:
-            raise endpoints.NotFoundException('No conference found with key: %s' % request.websafeConferenceKey)
+        if not request.websafeSessionKey:
+            raise endpoints.BadRequestException('websafeSessionKey are required')
 
         # check that session exists
-        session_key = ndb.Key(urlsafe=request.sessionId)
+        session_key = ndb.Key(urlsafe=request.websafeSessionKey)
         session = session_key.get()
         if not session:
-            raise endpoints.NotFoundException('No session found with key: %s' % request.sessionId)
+            raise endpoints.NotFoundException('No session found with key: %s' % request.websafeSessionKey)
 
         new_wishlist_session = UserWishList(
             userId=getUserId(user),
-            conferenceId=conf_key.urlsafe(),
-            sessionId=session_key.urlsafe()
+            websafeSessionKey=session_key.urlsafe()
         )
         new_wishlist_session.put()
 
         return UserWishListForm(
             userId=getUserId(user),
-            conferenceId=conf_key.urlsafe(),
-            sessionId=session_key.urlsafe()
+            websafeSessionKey=session_key.urlsafe()
         )
 
     @endpoints.method(WISHLIST_GET_REQUEST, UserWishListSessionForms,
-                      path='conference/{websafeConferenceKey}/wishlist',
+                      path='session/wishlist',
                       http_method='GET', name='getWishList')
     def getWishList(self, request):
         """Retrieves a list of wishlisted sessions for the current user"""
@@ -769,19 +770,9 @@ class ConferenceApi(remote.Service):
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
 
-        # Check if parameters were provided
-        if not request.websafeConferenceKey:
-            raise endpoints.BadRequestException('websafeConferenceKey is required')
+        sessions_in_wishlist = UserWishList.query().filter(UserWishList.userId == getUserId(user))
 
-        # check that conference exists
-        conf = ndb.Key(urlsafe=request.websafeConferenceKey)
-        if not conf:
-            raise endpoints.NotFoundException('No conference found with key: %s' % conf)
-
-        sessions_in_wishlist = UserWishList.query().filter(UserWishList.userId == getUserId(user),
-                                                           UserWishList.conferenceId == request.websafeConferenceKey)
-
-        session_keys = [ndb.Key(urlsafe=wishlist.sessionId)
+        session_keys = [ndb.Key(urlsafe=wishlist.websafeSessionKey)
                         for wishlist in sessions_in_wishlist]
 
         sessions = ndb.get_multi(session_keys)
@@ -789,7 +780,7 @@ class ConferenceApi(remote.Service):
         return UserWishListSessionForms(sessions=[self._copySessionToForm(session) for session in sessions])
 
     @endpoints.method(WISHLIST_DELETE_REQUEST, BooleanMessage,
-                      path='session/{sessionId}',
+                      path='session/{websafeSessionKey}',
                       http_method='DELETE', name='deleteWishList')
     def deleteWishList(self, request):
         """Deletes a UserWishList object"""
@@ -799,14 +790,14 @@ class ConferenceApi(remote.Service):
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
 
-        session_key = ndb.Key(urlsafe=request.sessionId)
+        session_key = ndb.Key(urlsafe=request.websafeSessionKey)
         session = session_key.get()
 
         if not session:
             raise endpoints.NotFoundException('Session not found')
 
         wishlist_entity = UserWishList.query().filter(UserWishList.userId == getUserId(user),
-                                                      UserWishList.sessionId == request.sessionId).fetch()
+                                                      UserWishList.websafeSessionKey == request.websafeSessionKey).fetch()
 
         for wish in wishlist_entity:
 
@@ -836,7 +827,7 @@ class ConferenceApi(remote.Service):
         user_key = ndb.Key(Profile, getUserId(user)).get()
 
         return ConferenceForms(
-            items=[self._copyConferenceToForm(conf, getattr(user_key, 'displayName')) for conf in confs]
+            items=[self._copyConferenceToForm(conf) for conf in confs]
         )
 
     @endpoints.method(CONF_SEATS_AVAILABLE_GET_REQUEST, ConferenceForms,
@@ -855,7 +846,7 @@ class ConferenceApi(remote.Service):
         user_key = ndb.Key(Profile, getUserId(user)).get()
 
         return ConferenceForms(
-            items=[self._copyConferenceToForm(conf, getattr(user_key, 'displayName')) for conf in confs]
+            items=[self._copyConferenceToForm(conf) for conf in confs]
         )
 
     # Featured speaker -------------------------------------------------------------------------------------------------

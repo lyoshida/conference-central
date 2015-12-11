@@ -50,11 +50,16 @@ class SetFeatureSpeakerHandler(webapp2.RequestHandler):
         """Sets the featured speaker in memcache"""
         # Retrieves a list of sessions from the same speaker at this conference
 
-        p_key = ndb.Key(Conference, self.request.get('websafeConferenceKey'))
+        p_key = ndb.Key(urlsafe=self.request.get('websafeConferenceKey'))
 
         sessions_by_speaker = Session.query(ancestor=p_key)\
                                      .filter(Session.speaker == self.request.get('speaker'))
+
+        print('-------- sessions by speaker ------------')
+        print(sessions_by_speaker)
         if sessions_by_speaker.count() > 0:
+            print('-------count ------')
+            print(sessions_by_speaker.count())
             sessions_str = ''
             for session in sessions_by_speaker:
                 sessions_str += session.name + ', '
@@ -62,7 +67,6 @@ class SetFeatureSpeakerHandler(webapp2.RequestHandler):
             sessions_str = sessions_str[:-2]
 
             speaker_memcache_message = SPEAKER_TPL % (self.request.get('speaker'), sessions_str)
-
             memcache.set(MEMCACHE_SPEAKER_KEY, speaker_memcache_message)
 
 

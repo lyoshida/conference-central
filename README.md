@@ -27,9 +27,14 @@ Course code for Building Scalable Apps with Google App Engine in Python class
 
 The session is implemented as being a child of Conference. This makes it easier to retrieve sessions from a
 specific conference. Each session has a field which holds the speaker name (String) and we can do a simple
-query to retrieve sessions of a particular speaker:
+(string) query to retrieve sessions of a particular speaker. As the app needs to make some queries filtering
+by the speaker, it would be useful to use a string as it is automatically indexed. This is also true for the
+session type field.
 
 `sessions = sessions.filter(Session.speaker == request.speaker)`
+
+The `date` and `startTime` fields were added as types date and time respectively. If we need to sort these,
+the would be sorted chronologically and it makes sense to use these types for that.
 
 
 ## Additional queries

@@ -55,11 +55,7 @@ class SetFeatureSpeakerHandler(webapp2.RequestHandler):
         sessions_by_speaker = Session.query(ancestor=p_key)\
                                      .filter(Session.speaker == self.request.get('speaker'))
 
-        print('-------- sessions by speaker ------------')
-        print(sessions_by_speaker)
         if sessions_by_speaker.count() > 0:
-            print('-------count ------')
-            print(sessions_by_speaker.count())
             sessions_str = ''
             for session in sessions_by_speaker:
                 sessions_str += session.name + ', '
